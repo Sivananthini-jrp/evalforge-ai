@@ -1,0 +1,32 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Environment Variables (SECURITY)
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+backend/schema.sql
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# HuggingFace Cache
+.cache/
+*.safetensors
+*.bin
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
