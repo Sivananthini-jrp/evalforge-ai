@@ -1,52 +1,14 @@
 # evalforge-ai/backend/app/services/evaluators/hallucination.py
-"""
-Hybrid hallucination detector.
-
-Per claim in the response, we compute one of:
-  - supported      : evidence entails the claim (or numeric fact matches)
-  - contradicted   : evidence contradicts the claim (numeric mismatch or NLI contradiction)
-  - unsupported    : evidence neither entails nor contradicts (unknown)
-
-hallucination_rate = (# contradicted + # unsupported) / total_claims
-
-The numeric check runs first because NLI models are notoriously weak on
-number substitutions (7 -> 30 still reads as "fluent" to a language model).
-"""
-from __future__ import annotations
-
 import re
-
-from transformers import pipeline
-
+import httpx
+import os
 from app.config import settings
 
-
-# ---------------------------------------------------------------------------
-# Lazy singletons
-# ---------------------------------------------------------------------------
-_nli = None
-
-
-def _get_nli():
-    global _nli
-    if _nli is None:
-        _nli = pipeline(
-            "text-classification",
-            model="MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
-            top_k=None,
-        )
-    return _nli
-
-
-# ---------------------------------------------------------------------------
-# Numeric / unit extraction
-# ---------------------------------------------------------------------------
 NUMBER_RE = re.compile(
     r"(?P<value>\d+(?:[.,]\d+)?)\s*"
     r"(?P<unit>days?|hours?|weeks?|months?|years?|%|rupees?|rs\.?|inr|usd|\$|dollars?)?",
     re.IGNORECASE,
 )
-
 
 def _extract_numeric(text: str) -> list[dict]:
     out = []
@@ -57,7 +19,6 @@ def _extract_numeric(text: str) -> list[dict]:
             continue
         out.append({"raw": m.group(0).strip(), "value": val, "unit": (m.group("unit") or "").lower()})
     return out
-
 
 def _check_numeric(evidence: str, claim: str) -> list[dict]:
     ev = _extract_numeric(evidence)
@@ -71,44 +32,49 @@ def _check_numeric(evidence: str, claim: str) -> list[dict]:
         if any(abs(m["value"] - r["value"]) < 1e-6 for m in matching):
             results.append({**r, "status": "supported"})
         else:
-            results.append({
-                **r,
-                "status": "contradicted",
-                "expected": [m["value"] for m in matching],
-            })
+            results.append({**r, "status": "contradicted", "expected": [m["value"] for m in matching]})
     return results
 
-
-# ---------------------------------------------------------------------------
-# Claim splitting (naive but effective)
-# ---------------------------------------------------------------------------
 def _split_claims(text: str) -> list[str]:
     parts = re.split(r"(?<=[.!?])\s+|\b(?:and|but|while|whereas|however)\b", text.strip())
     return [p.strip() for p in parts if len(p.strip()) > 5]
 
-
-# ---------------------------------------------------------------------------
-# NLI per claim
-# ---------------------------------------------------------------------------
 def nli_score(evidence: str, claim: str) -> dict:
-    nli = _get_nli()
-    out = nli(evidence, text_pair=claim)[0]
-    labels = {d["label"].lower(): d["score"] for d in out}
-    entail = labels.get("entailment", 0.0)
-    contra = labels.get("contradiction", 0.0)
-    neutral = labels.get("neutral", 0.0)
+    api_url = "https://api-inference.huggingface.co/models/MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
+    headers = {}
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
 
-    threshold = settings.DEFAULT_HALLUCINATION_THRESHOLD
-    if entail >= threshold:
-        return {"status": "supported", "score": entail}
-    if contra >= threshold:
-        return {"status": "contradicted", "score": contra}
-    return {"status": "unsupported", "score": neutral}
+    payload = {
+        "inputs": evidence,
+        "parameters": {"text_pair": claim, "top_k": 3}
+    }
 
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(api_url, headers=headers, json=payload)
+            resp.raise_for_status()
+            out = resp.json()
+            
+            if isinstance(out, list):
+                labels = {d["label"].lower(): d["score"] for d in out}
+            else:
+                labels = {out["label"].lower(): out["score"]}
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+            entail = labels.get("entailment", 0.0)
+            contra = labels.get("contradiction", 0.0)
+            neutral = labels.get("neutral", 0.0)
+
+            threshold = settings.DEFAULT_HALLUCINATION_THRESHOLD
+            if entail >= threshold:
+                return {"status": "supported", "score": entail}
+            if contra >= threshold:
+                return {"status": "contradicted", "score": contra}
+            return {"status": "unsupported", "score": neutral}
+    except Exception:
+        return {"status": "unsupported", "score": 0.0}
+
 def analyze(evidence: str | None, response: str | None) -> dict:
     if not evidence or not response:
         return {"claims": [], "hallucination_rate": 0.0, "has_hallucination": False}
@@ -118,12 +84,7 @@ def analyze(evidence: str | None, response: str | None) -> dict:
     for claim in claims:
         numeric = _check_numeric(evidence, claim)
         if numeric and any(n["status"] == "contradicted" for n in numeric):
-            results.append({
-                "claim": claim,
-                "status": "contradicted",
-                "reason": "numeric contradiction",
-                "details": numeric,
-            })
+            results.append({"claim": claim, "status": "contradicted", "reason": "numeric contradiction", "details": numeric})
             continue
         s = nli_score(evidence, claim)
         results.append({"claim": claim, **s})

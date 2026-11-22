@@ -1,37 +1,20 @@
 # evalforge-ai/backend/app/services/evaluators/correctness.py
-"""
-Correctness evaluator.
-
-Combines:
-  - exact / substring match (fast, deterministic)
-  - semantic similarity via SentenceTransformers (handles paraphrase)
-
-Neither is sufficient alone, so we blend them:
-  score = max(1.0 if exact else 0.0, semantic_sim)
-"""
-from __future__ import annotations
-
 import re
-
 import numpy as np
-from sentence_transformers import SentenceTransformer
-
+from fastembed import TextEmbedding
 from app.config import settings
 
+_embedder = None
 
-_model: SentenceTransformer | None = None
-
-
-def _get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    return _model
-
+def _get_embedder():
+    global _embedder
+    if _embedder is None:
+        # Lightweight ONNX model (very low RAM)
+        _embedder = TextEmbedding("BAAI/bge-small-en-v1.5")
+    return _embedder
 
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
-
 
 def evaluate(expected: str | None, actual: str | None) -> dict:
     if not expected or not actual:
@@ -40,9 +23,9 @@ def evaluate(expected: str | None, actual: str | None) -> dict:
     e_norm, a_norm = _normalize(expected), _normalize(actual)
     exact = e_norm == a_norm or e_norm in a_norm
 
-    model = _get_model()
-    emb = model.encode([expected, actual], normalize_embeddings=True)
-    sim = float(np.dot(emb[0], emb[1]))
+    embedder = _get_embedder()
+    embeddings = list(embedder.embed([expected, actual]))
+    sim = float(np.dot(embeddings[0], embeddings[1]))
 
     score = max(1.0 if exact else 0.0, sim)
     threshold = settings.DEFAULT_CORRECTNESS_THRESHOLD
