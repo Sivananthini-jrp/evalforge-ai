@@ -1,7 +1,7 @@
 // evalforge-ai/frontend/src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/auth';
-import Layout from './components/layout/Layout';
+import Layout from './components/layout/layout';
 import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import NewExperiment from './pages/NewExperiment';
