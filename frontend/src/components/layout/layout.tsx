@@ -21,12 +21,13 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { name: 'Datasets', path: '/datasets', icon: Database },
-  { name: 'New Experiment', path: '/experiments/new', icon: FlaskConical },
-  { name: 'Compare Models', path: '/compare', icon: BarChart3 },
-  { name: 'Reports', path: '/reports', icon: FileText },
-];
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Datasets', path: '/datasets', icon: Database },
+    { name: 'New Experiment', path: '/experiments/new', icon: FlaskConical },
+    { name: 'Compare Models', path: '/compare', icon: BarChart3 },
+    // MAKE SURE THIS SAYS /reports
+    { name: 'Reports', path: '/reports', icon: FileText }, 
+  ];
 
 export default function Layout() {
   const logout = useAuthStore((s) => s.logout);

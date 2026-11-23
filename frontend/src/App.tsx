@@ -1,7 +1,7 @@
 // evalforge-ai/frontend/src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/auth';
-import Layout from './components/layout/layout';
+import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import NewExperiment from './pages/NewExperiment';
@@ -25,9 +25,15 @@ export default function App() {
         <Route path="/" element={<ProtectedLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="datasets" element={<Datasets />} />
+          
+          {/* This redirects /experiments to the dashboard */}
+          <Route path="experiments" element={<Navigate to="/" replace />} />
+          
           <Route path="experiments/new" element={<NewExperiment />} />
           <Route path="experiments/:id" element={<ExperimentDetail />} />
           <Route path="compare" element={<Compare />} />
+          
+          {/* THIS IS THE CRUCIAL LINE FOR REPORTS */}
           <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>

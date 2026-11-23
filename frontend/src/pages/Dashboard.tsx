@@ -278,9 +278,9 @@ export default function Dashboard() {
           glowClass="bg-indigo-500/40"
         />
         <StatCard
-          to="/experiments"
+          to="/reports"
           label="Experiments Run"
-          hint="Click to review experiment history"
+          hint="Click to view completed reports"
           value={stats.experiments}
           loading={loading}
           delay={160}
