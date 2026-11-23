@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://evalforge-backend-xxxx.onrender.com/api', // <-- Paste your actual URL here
+  baseURL: 'https://evalforge-ai-nbqz.onrender.com/api', // <-- Paste your actual URL here
 });
 
 api.interceptors.request.use((config) => {
